@@ -68,7 +68,7 @@ def load_favourite_commands(path: Path = FAVOURITES_FILE) -> list[str]:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Unreal ADB Commands")
+        self.setWindowTitle("Unreal Engine ADB Console Commands")
         self.resize(820, 560)
 
         central = QWidget(self)
