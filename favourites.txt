@@ -1,0 +1,10 @@
+# Default Unreal Engine console favourites
+stat unit
+stat fps
+xr.SecondaryScreenPercentage.HMDRenderTarget 100
+r.MSAACount 8
+r.Antiailising 3
+ShowDebug EnhancedInput 0
+ShowDebug EnhancedInput 1
+ShowFlag.Splines 0
+ShowFlag.Splines 1
