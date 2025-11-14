@@ -2,6 +2,8 @@
 
 PySide6 desktop application for sending Unreal Engine console commands to an Android headset/device over ADB using the `adbutils` Python library (no raw subprocess juggling).
 
+![UE ADB Console Commands window](docs/images/window.png)
+
 **Features**
 - Device picker with auto-refresh and status updates
 - Favourites list (double-click to send instantly)
