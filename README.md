@@ -11,22 +11,22 @@ PySide6 desktop app for firing Unreal Engine console commands to an Android head
 - Built-in log so you can see every `adb` response without leaving the UI
 
 ## Requirements
-- Windows with Python **3.10**; create a `.venv` in the repo root.
-- Android Platform Tools on PATH and an authorized Unreal headset listening for `android.intent.action.RUN` with string extra `cmd`.
-- Optional but recommended: drop the latest `ConsoleHelp.html` export into the repo root (UE ➜ Help ➜ Console Variables) so autocomplete and the All Commands table stay in sync with your project.
-- Edit `favourites.txt` to tune the quick-send list.
+- Windows with Python **3.10**; create a `.venv` in the repo root. Might work on other OS. Untested.
+- ADB Installed and setup on PATH. 
+- Edit `favourites.txt` to tune the quick-send list to whatever you frquently use. 
 
 ## Quick Start
+VS Code (recommended) Open root folder in VSCode, enable the `.venv` interpreter when prompted, and tick requirments.txt when it asks. It should pull all the resources needed. Then press `F5` or Run.
+
+**Run Manually**
 ```powershell
 py -3.10 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install --upgrade pip
 pip install -r requirements.txt
+python -m src.main
 ```
 
-1. Copy your freshly exported `ConsoleHelp.html` next to `README.md` (optional fallback to favourites if omitted).
-2. Launch from VS Code (recommended): open the folder, pick the `.venv` interpreter when prompted, then press `F5` (or use Run and Debug → **Run Unreal Commands UI**).
-3. Prefer a terminal? With the venv active run `python -m src.main`.
 
 ## Usage Notes
 - The All Commands panel is collapsible; use the search box to filter by substring across command names and help.
