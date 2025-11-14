@@ -2,6 +2,8 @@
 
 PySide6 desktop app for firing Unreal Engine console commands to an Android headset over ADB—favourites, autocomplete, and a full catalog powered by `ConsoleHelp.html`.
 
+I built this while working on Meta Quest 3 apps and needed a way to send console commands easily and quickly to headset.
+
 ![UE ADB Console Commands window](docs/images/window.png)
 
 **Highlights**
