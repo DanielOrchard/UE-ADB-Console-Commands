@@ -6,6 +6,7 @@ for device communication and parses Unreal's `ConsoleHelp.html` via
 """
 from __future__ import annotations
 
+import configparser
 import sys
 from pathlib import Path
 from typing import Optional
@@ -22,6 +23,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -40,7 +42,7 @@ from .adb_client import (
 from .commands_loader import UnrealCommand, load_commands
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-FAVOURITES_FILE = PROJECT_ROOT / "favourites.txt"
+FAVOURITES_FILE = PROJECT_ROOT / "favourites.ini"
 DEFAULT_FAVOURITES = [
     "stat unit",
     "stat fps",
@@ -51,18 +53,89 @@ DEFAULT_FAVOURITES = [
 
 
 def load_favourite_commands(path: Path = FAVOURITES_FILE) -> list[str]:
+    """Load favourite commands from INI file."""
+    config = configparser.ConfigParser()
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        config.read(path, encoding="utf-8")
+        if "Commands" in config:
+            # INI stores as key=value; we use the value part
+            favourites = [cmd for cmd in config["Commands"].values() if cmd.strip()]
+            return favourites if favourites else DEFAULT_FAVOURITES.copy()
     except Exception:
-        return DEFAULT_FAVOURITES.copy()
+        pass
+    return DEFAULT_FAVOURITES.copy()
 
-    favourites: list[str] = []
-    for line in lines:
-        cleaned = line.strip()
-        if not cleaned or cleaned.startswith("#"):
-            continue
-        favourites.append(cleaned)
-    return favourites or DEFAULT_FAVOURITES.copy()
+
+def save_favourite_command(command: str, path: Path = FAVOURITES_FILE) -> bool:
+    """Save a command to favourites INI file. Returns True if successful."""
+    if not command.strip():
+        return False
+    
+    config = configparser.ConfigParser()
+    
+    # Load existing favourites
+    try:
+        config.read(path, encoding="utf-8")
+    except Exception:
+        pass
+    
+    # Ensure Commands section exists
+    if "Commands" not in config:
+        config["Commands"] = {}
+    
+    # Check if command already exists
+    existing_commands = [cmd for cmd in config["Commands"].values()]
+    if command in existing_commands:
+        return False  # Already exists
+    
+    # Add new command with a numbered key
+    key_num = len(config["Commands"]) + 1
+    config["Commands"][f"cmd{key_num}"] = command
+    
+    # Write back to file
+    try:
+        with path.open("w", encoding="utf-8") as f:
+            config.write(f)
+        return True
+    except Exception:
+        return False
+
+
+def delete_favourite_command(command: str, path: Path = FAVOURITES_FILE) -> bool:
+    """Delete a command from favourites INI file. Returns True if successful."""
+    if not command.strip():
+        return False
+    
+    config = configparser.ConfigParser()
+    
+    # Load existing favourites
+    try:
+        config.read(path, encoding="utf-8")
+    except Exception:
+        return False
+    
+    if "Commands" not in config:
+        return False
+    
+    # Find and remove the command
+    key_to_delete = None
+    for key, value in config["Commands"].items():
+        if value == command:
+            key_to_delete = key
+            break
+    
+    if key_to_delete:
+        del config["Commands"][key_to_delete]
+        
+        # Write back to file
+        try:
+            with path.open("w", encoding="utf-8") as f:
+                config.write(f)
+            return True
+        except Exception:
+            return False
+    
+    return False
 
 
 class MainWindow(QMainWindow):
@@ -106,9 +179,12 @@ class MainWindow(QMainWindow):
         self.send_button = QPushButton("Send")
         self.send_button.clicked.connect(self.send_manual_command)
         self.command_input.returnPressed.connect(self.send_manual_command)
+        self.save_fav_button = QPushButton("Save to Favourites")
+        self.save_fav_button.clicked.connect(self.save_current_to_favourites)
         cmd_row.addWidget(QLabel("Command:"))
         cmd_row.addWidget(self.command_input, 4)
         cmd_row.addWidget(self.send_button)
+        cmd_row.addWidget(self.save_fav_button)
         root_layout.addLayout(cmd_row)
 
         self.completer = QCompleter(self.full_command_names)
@@ -120,6 +196,8 @@ class MainWindow(QMainWindow):
         # Favourites list
         self.fav_list = QListWidget()
         self.fav_list.itemDoubleClicked.connect(self.send_selected_favorite)
+        self.fav_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.fav_list.customContextMenuRequested.connect(self.show_favourites_context_menu)
         root_layout.addWidget(QLabel("Favourites:"))
         root_layout.addWidget(self.fav_list, 3)
 
@@ -291,6 +369,56 @@ class MainWindow(QMainWindow):
         self.command_input.setText(command)
         self.command_input.setFocus()
         self.status_bar.showMessage(f"Prepared '{command}' — edit arguments and press Send")
+
+    def save_current_to_favourites(self):
+        """Save the current command in the input field to favourites."""
+        cmd = self.command_input.text().strip()
+        if not cmd:
+            self.status_bar.showMessage("No command to save")
+            return
+        
+        if save_favourite_command(cmd):
+            self.favourite_commands = load_favourite_commands()
+            self.populate_favourites()
+            self.append_log(f"Saved to favourites: {cmd}")
+            self.status_bar.showMessage(f"Saved '{cmd}' to favourites")
+        else:
+            self.status_bar.showMessage(f"'{cmd}' already in favourites")
+            self.append_log(f"Command already in favourites: {cmd}")
+
+    def show_favourites_context_menu(self, position):
+        """Show context menu for favourites list."""
+        item = self.fav_list.itemAt(position)
+        if not item:
+            return
+        
+        menu = QMenu(self)
+        send_action = menu.addAction("Send Command")
+        copy_action = menu.addAction("Copy to Command Box")
+        menu.addSeparator()
+        delete_action = menu.addAction("Delete Favourite")
+        
+        action = menu.exec(self.fav_list.mapToGlobal(position))
+        
+        if action == send_action:
+            self._send_command(item.text())
+        elif action == copy_action:
+            self.command_input.setText(item.text())
+            self.command_input.setFocus()
+            self.status_bar.showMessage(f"Copied '{item.text()}' to command box")
+        elif action == delete_action:
+            self.delete_favourite(item.text())
+    
+    def delete_favourite(self, command: str):
+        """Delete a favourite command."""
+        if delete_favourite_command(command):
+            self.favourite_commands = load_favourite_commands()
+            self.populate_favourites()
+            self.append_log(f"Deleted from favourites: {command}")
+            self.status_bar.showMessage(f"Deleted '{command}' from favourites")
+        else:
+            self.status_bar.showMessage(f"Failed to delete '{command}'")
+            self.append_log(f"Failed to delete: {command}")
 
 
 def main():
