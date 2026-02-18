@@ -14,8 +14,11 @@ from pathlib import Path
 import re
 from typing import List, Optional
 
-# Relative default path (from src directory) to the Saved export.
-DEFAULT_HTML_RELATIVE = Path("..") / ".." / ".." / "Saved" / "ConsoleHelp.html"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_HTML_CANDIDATES = (
+    PROJECT_ROOT / "ConsoleHelp.html",
+    PROJECT_ROOT / "Saved" / "ConsoleHelp.html",
+)
 
 
 @dataclass
@@ -47,8 +50,16 @@ def _sanitize_help(text: str) -> str:
 
 
 def load_commands(html_path: Optional[Path] = None) -> List[UnrealCommand]:
-    path = html_path or DEFAULT_HTML_RELATIVE
-    path = path if path.is_absolute() else (Path(__file__).parent / path).resolve()
+    if html_path is not None:
+        path = html_path if html_path.is_absolute() else (Path(__file__).parent / html_path).resolve()
+    else:
+        path = None
+        for candidate in DEFAULT_HTML_CANDIDATES:
+            if candidate.exists():
+                path = candidate
+                break
+        if path is None:
+            path = DEFAULT_HTML_CANDIDATES[0]
     if not path.exists():
         return []
     try:

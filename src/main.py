@@ -43,6 +43,8 @@ from .commands_loader import UnrealCommand, load_commands
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FAVOURITES_FILE = PROJECT_ROOT / "favourites.ini"
+HISTORY_FILE = PROJECT_ROOT / "history.ini"
+MAX_HISTORY = 50
 DEFAULT_FAVOURITES = [
     "stat unit",
     "stat fps",
@@ -64,6 +66,43 @@ def load_favourite_commands(path: Path = FAVOURITES_FILE) -> list[str]:
     except Exception:
         pass
     return DEFAULT_FAVOURITES.copy()
+
+
+def load_history_commands(path: Path = HISTORY_FILE) -> list[str]:
+    """Load command history from INI file (most-recent first)."""
+    config = configparser.ConfigParser()
+    try:
+        config.read(path, encoding="utf-8")
+        if "History" in config:
+            return [cmd for cmd in config["History"].values() if cmd.strip()]
+    except Exception:
+        pass
+    return []
+
+
+def save_history_commands(commands: list[str], path: Path = HISTORY_FILE) -> bool:
+    """Persist command history to INI file."""
+    config = configparser.ConfigParser()
+    config["History"] = {}
+    for idx, cmd in enumerate(commands, start=1):
+        config["History"][f"cmd{idx}"] = cmd
+    try:
+        with path.open("w", encoding="utf-8") as f:
+            config.write(f)
+        return True
+    except Exception:
+        return False
+
+
+def add_history_command(command: str, path: Path = HISTORY_FILE) -> bool:
+    """Insert command into history (most-recent first) and persist."""
+    if not command.strip():
+        return False
+    history = load_history_commands(path)
+    history = [cmd for cmd in history if cmd != command]
+    history.insert(0, command)
+    history = history[:MAX_HISTORY]
+    return save_history_commands(history, path)
 
 
 def save_favourite_command(command: str, path: Path = FAVOURITES_FILE) -> bool:
@@ -161,6 +200,7 @@ class MainWindow(QMainWindow):
 
         # Load favourites from text file
         self.favourite_commands: list[str] = load_favourite_commands()
+        self.history_commands: list[str] = load_history_commands()
 
         # Load full command catalog from HTML; fall back to favourites if missing
         self.full_commands: list[UnrealCommand] = load_commands()
@@ -193,13 +233,26 @@ class MainWindow(QMainWindow):
         self.completer.setCompletionMode(QCompleter.PopupCompletion)
         self.command_input.setCompleter(self.completer)
 
-        # Favourites list
+        # Favourites + History lists
+        lists_row = QHBoxLayout()
+
+        fav_col = QVBoxLayout()
         self.fav_list = QListWidget()
         self.fav_list.itemDoubleClicked.connect(self.send_selected_favorite)
         self.fav_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.fav_list.customContextMenuRequested.connect(self.show_favourites_context_menu)
-        root_layout.addWidget(QLabel("Favourites:"))
-        root_layout.addWidget(self.fav_list, 3)
+        fav_col.addWidget(QLabel("Favourites:"))
+        fav_col.addWidget(self.fav_list, 1)
+
+        hist_col = QVBoxLayout()
+        self.history_list = QListWidget()
+        self.history_list.itemDoubleClicked.connect(self.send_selected_history)
+        hist_col.addWidget(QLabel("History:"))
+        hist_col.addWidget(self.history_list, 1)
+
+        lists_row.addLayout(fav_col, 1)
+        lists_row.addLayout(hist_col, 1)
+        root_layout.addLayout(lists_row, 3)
 
         # Collapsible full list panel
         self.full_toggle = QToolButton(text="Show All Commands")
@@ -250,6 +303,7 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage("Initializing...")
 
         self.populate_favourites()
+        self.populate_history()
         self.populate_full_list()
         self.refresh_devices()
 
@@ -291,6 +345,11 @@ class MainWindow(QMainWindow):
         self.fav_list.clear()
         for cmd in self.favourite_commands:
             QListWidgetItem(cmd, self.fav_list)
+
+    def populate_history(self):
+        self.history_list.clear()
+        for cmd in self.history_commands:
+            QListWidgetItem(cmd, self.history_list)
 
     def populate_full_list(self, commands: Optional[list[UnrealCommand]] = None):
         data = commands if commands is not None else self.full_commands
@@ -345,6 +404,9 @@ class MainWindow(QMainWindow):
         dev = self.current_device() or get_default_device()
         self.append_log(f"Sending: {cmd}")
         ok, msg = send_unreal_command(cmd, dev)
+        if add_history_command(cmd):
+            self.history_commands = load_history_commands()
+            self.populate_history()
         if ok:
             self.append_log(f"OK: {msg}")
             self.status_bar.showMessage(f"Sent '{cmd}'")
@@ -357,6 +419,9 @@ class MainWindow(QMainWindow):
         self._send_command(cmd)
 
     def send_selected_favorite(self, item: QListWidgetItem):
+        self._send_command(item.text())
+
+    def send_selected_history(self, item: QListWidgetItem):
         self._send_command(item.text())
 
     def send_selected_full(self, row: int, column: int):  # noqa: ARG002
